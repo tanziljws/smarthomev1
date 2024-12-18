@@ -9,15 +9,29 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@alptugidin/react-circular-progress-bar": "^1.1.4",
+    "@google/generative-ai": "^0.21.0",
+    "@prisma/client": "^6.1.0",
+    "axios": "^1.7.9",
+    "framer-motion": "^11.15.0",
+    "mqtt": "^5.10.3",
+    "mysql2": "^3.11.5",
+    "next": "15.1.1",
+    "openai": "^4.77.0",
+    "precompiled-mqtt": "^4.3.14-beta",
+    "prisma": "^6.1.0",
     "react": "^19.0.0",
+    "react-circular-progressbar": "^2.1.0",
     "react-dom": "^19.0.0",
-    "next": "15.1.1"
+    "speaker": "^0.5.5",
+    "ws": "^8.18.0",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
+    "@eslint/eslintrc": "^3",
     "eslint": "^9",
     "eslint-config-next": "15.1.1",
-    "@eslint/eslintrc": "^3"
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1"
   }
 }
