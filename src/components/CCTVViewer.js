@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { CCTV_FEATURES, CCTV_PRESETS } from '@/lib/cctvUtils'
+import VoiceStreamer from '@/lib/VoiceStreamer'
 
 export default function CCTVViewer({ cctv }) {
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -13,6 +14,8 @@ export default function CCTVViewer({ cctv }) {
     audio_volume: 70
   })
   const videoRef = useRef(null)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const voiceStreamerRef = useRef(null)
 
   // Simulasi motion detection
   useEffect(() => {
@@ -33,6 +36,17 @@ export default function CCTVViewer({ cctv }) {
     return () => clearInterval(interval)
   }, [motionDetected, cctv.name])
 
+  useEffect(() => {
+    if (cctv.features?.audio) {
+      voiceStreamerRef.current = new VoiceStreamer('192.168.2.90')
+    }
+    return () => {
+      if (voiceStreamerRef.current?.isStreaming) {
+        voiceStreamerRef.current.stopStreaming()
+      }
+    }
+  }, [cctv.features?.audio])
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       videoRef.current.requestFullscreen()
@@ -48,15 +62,27 @@ export default function CCTVViewer({ cctv }) {
     // Implement recording logic here
   }
 
+  const handleVoiceStream = async () => {
+    if (!voiceStreamerRef.current.isStreaming) {
+      const success = await voiceStreamerRef.current.startStreaming()
+      if (success) {
+        setIsStreaming(true)
+      }
+    } else {
+      voiceStreamerRef.current.stopStreaming()
+      setIsStreaming(false)
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden">
       {/* Video Feed */}
-      <div className="relative aspect-video bg-black">
+      <div className="relative aspect-video bg-gray-900">
         <img
           ref={videoRef}
           src={cctv.stream_url}
           alt={cctv.name}
-          className="w-full h-full object-contain"
+          className="w-full h-full object-cover"
         />
         
         {/* Overlay Controls */}
@@ -138,70 +164,102 @@ export default function CCTVViewer({ cctv }) {
         </div>
 
         {/* Feature Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4 p-4 bg-[#E6EEF8] rounded-xl">
           {/* Motion Detection */}
-          <div className="p-4 rounded-lg bg-gray-50">
-            <div className="flex items-center gap-2 mb-2">
-              <span>{CCTV_FEATURES.motion_detection.icon}</span>
-              <span className="font-medium">Motion Detection</span>
+          <div className="aspect-[3/4] p-4 bg-white rounded-2xl flex flex-col">
+            <div className="mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="text-lg">👁️</span>
+                </div>
+                <span className="font-medium text-gray-800">Motion Detection</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Adjust sensitivity</p>
             </div>
-            <input
-              type="range"
-              min="1"
-              max="10"
-              value={settings.motion_sensitivity}
-              onChange={(e) => setSettings({
-                ...settings,
-                motion_sensitivity: parseInt(e.target.value)
-              })}
-              className="w-full"
-            />
-            <div className="text-sm text-gray-500 mt-1">
-              Sensitivity: {settings.motion_sensitivity}
+            
+            <div className="flex-grow flex flex-col justify-center">
+              <input
+                type="range"
+                min="1"
+                max="10"
+                value={settings.motion_sensitivity}
+                onChange={(e) => setSettings({
+                  ...settings,
+                  motion_sensitivity: parseInt(e.target.value)
+                })}
+                className="w-full accent-blue-500"
+              />
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-sm text-gray-600">Sensitivity</span>
+                <span className="text-sm font-medium">{settings.motion_sensitivity}</span>
+              </div>
             </div>
           </div>
 
-          {/* Recording Quality */}
-          <div className="p-4 rounded-lg bg-gray-50">
-            <div className="flex items-center gap-2 mb-2">
-              <span>{CCTV_FEATURES.recording.icon}</span>
-              <span className="font-medium">Recording</span>
+          {/* Recording */}
+          <div className="aspect-[3/4] p-4 bg-white rounded-2xl flex flex-col">
+            <div className="mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+                  <span className="text-lg">🎥</span>
+                </div>
+                <span className="font-medium text-gray-800">Recording</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Set quality level</p>
             </div>
-            <select
-              value={settings.recording_quality}
-              onChange={(e) => setSettings({
-                ...settings,
-                recording_quality: e.target.value
-              })}
-              className="w-full p-2 rounded-lg border"
-            >
-              {CCTV_FEATURES.recording.settings.quality.map(quality => (
-                <option key={quality} value={quality}>
-                  {quality.charAt(0).toUpperCase() + quality.slice(1)}
-                </option>
-              ))}
-            </select>
+
+            <div className="flex-grow flex flex-col justify-center">
+              <select
+                value={settings.recording_quality}
+                onChange={(e) => setSettings({
+                  ...settings,
+                  recording_quality: e.target.value
+                })}
+                className="w-full p-2 rounded-lg border border-gray-200 bg-white text-sm"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+              <div className="mt-3 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span className="text-xs text-gray-500">Ready to record</span>
+              </div>
+            </div>
           </div>
 
-          {/* Audio Controls */}
-          <div className="p-4 rounded-lg bg-gray-50">
-            <div className="flex items-center gap-2 mb-2">
-              <span>{CCTV_FEATURES.audio.icon}</span>
-              <span className="font-medium">Audio</span>
+          {/* Audio */}
+          <div className="aspect-[3/4] p-4 bg-white rounded-2xl flex flex-col">
+            <div className="mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+                  <span className="text-lg">🎙️</span>
+                </div>
+                <span className="font-medium text-gray-800">Audio</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Control volume</p>
             </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={settings.audio_volume}
-              onChange={(e) => setSettings({
-                ...settings,
-                audio_volume: parseInt(e.target.value)
-              })}
-              className="w-full"
-            />
-            <div className="text-sm text-gray-500 mt-1">
-              Volume: {settings.audio_volume}%
+
+            <div className="flex-grow flex flex-col justify-center">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={settings.audio_volume}
+                onChange={(e) => setSettings({
+                  ...settings,
+                  audio_volume: parseInt(e.target.value)
+                })}
+                className="w-full accent-purple-500"
+              />
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <div className={`w-1 h-3 rounded-full bg-purple-500 ${settings.audio_volume > 30 ? 'opacity-100' : 'opacity-30'}`}></div>
+                  <div className={`w-1 h-4 rounded-full bg-purple-500 ${settings.audio_volume > 60 ? 'opacity-100' : 'opacity-30'}`}></div>
+                  <div className={`w-1 h-5 rounded-full bg-purple-500 ${settings.audio_volume > 90 ? 'opacity-100' : 'opacity-30'}`}></div>
+                </div>
+                <span className="text-sm font-medium">Volume: {settings.audio_volume}%</span>
+              </div>
             </div>
           </div>
         </div>

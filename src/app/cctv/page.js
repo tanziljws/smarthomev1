@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import CCTVViewer from '@/components/CCTVViewer'
 import { motion, AnimatePresence } from 'framer-motion'
+import VoiceStreamer from '@/lib/VoiceStreamer'
 
 export default function CCTVManagement() {
     const [cctvs, setCCTVs] = useState([])
@@ -13,16 +14,24 @@ export default function CCTVManagement() {
         features: {
             motion_detection: true,
             recording: true,
-            audio: false
+            audio: true
         }
     })
     const [editingId, setEditingId] = useState(null)
     const [selectedCCTV, setSelectedCCTV] = useState(null)
-    const [viewMode, setViewMode] = useState('grid') // 'grid' or 'single'
+    const [viewMode, setViewMode] = useState('grid')
     const [loading, setLoading] = useState(true)
+    const [currentTime, setCurrentTime] = useState('')
+    const [activeStreams, setActiveStreams] = useState({})
+    const streamersRef = useRef({})
 
     useEffect(() => {
         fetchCCTVs()
+        const timer = setInterval(() => {
+            setCurrentTime(new Date().toLocaleTimeString())
+        }, 1000)
+        
+        return () => clearInterval(timer)
     }, [])
 
     const fetchCCTVs = async () => {
@@ -30,7 +39,16 @@ export default function CCTVManagement() {
             setLoading(true)
             const res = await fetch('/api/cctv')
             const data = await res.json()
-            setCCTVs(data)
+            const cctvWithFeatures = data.map(cctv => ({
+                ...cctv,
+                features: {
+                    motion_detection: true,
+                    recording: true,
+                    audio: true,
+                    ...cctv.features
+                }
+            }))
+            setCCTVs(cctvWithFeatures)
         } catch (error) {
             console.error('Error fetching CCTVs:', error)
         } finally {
@@ -58,7 +76,7 @@ export default function CCTVManagement() {
                 features: {
                     motion_detection: true,
                     recording: true,
-                    audio: false
+                    audio: true
                 }
             })
             setEditingId(null)
@@ -82,8 +100,50 @@ export default function CCTVManagement() {
         }
     }
 
+    const handleVoiceStream = async (id) => {
+        if (activeStreams[id]) {
+            // Stop streaming if already active
+            streamersRef.current[id].stopStreaming()
+            setActiveStreams(prev => {
+                const newStreams = { ...prev }
+                delete newStreams[id]
+                return newStreams
+            })
+            return
+        }
+
+        // Start new stream
+        try {
+            const streamer = new VoiceStreamer(window.location.hostname)
+            streamersRef.current[id] = streamer
+            
+            const success = await streamer.startStreaming()
+            if (success) {
+                setActiveStreams(prev => ({
+                    ...prev,
+                    [id]: true
+                }))
+            } else {
+                delete streamersRef.current[id]
+                alert('Failed to start voice stream')
+            }
+        } catch (error) {
+            console.error('Error in voice stream:', error)
+            alert('Error starting voice stream')
+        }
+    }
+
+    // Cleanup streams on unmount
+    useEffect(() => {
+        return () => {
+            Object.values(streamersRef.current).forEach(streamer => {
+                streamer.stopStreaming()
+            })
+        }
+    }, [])
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
+        <div className="min-h-screen bg-gray-100 p-6">
             {/* Modern Header */}
             <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -92,7 +152,7 @@ export default function CCTVManagement() {
                             Surveillance Center
                         </h1>
                         <p className="text-gray-500">
-                            Monitoring {cctvs.length} cameras • Last updated {new Date().toLocaleTimeString()}
+                            Monitoring {cctvs.length} cameras • Last updated {currentTime}
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-4">
@@ -178,19 +238,46 @@ export default function CCTVManagement() {
                 <>
                     {/* Grid View */}
                     {viewMode === 'grid' ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {cctvs.map((cctv, index) => (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {cctvs.map(cctv => (
                                 <motion.div
                                     key={cctv.id}
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -20 }}
-                                    transition={{ duration: 0.3, delay: index * 0.1 }}
                                 >
-                                    <div className="bg-white rounded-2xl overflow-hidden shadow-xl
-                                                  hover:shadow-2xl transition-all duration-300
-                                                  hover:shadow-blue-500/10">
+                                    <div className="relative">
                                         <CCTVViewer cctv={cctv} />
+                                        <div className="absolute top-4 right-4 flex gap-2">
+                                            {/* Voice Stream Button */}
+                                            {cctv.features.audio && (
+                                                <button
+                                                    onClick={() => handleVoiceStream(cctv.id)}
+                                                    className={`p-2 ${
+                                                        activeStreams[cctv.id] 
+                                                            ? 'bg-green-500 hover:bg-green-600' 
+                                                            : 'bg-blue-500 hover:bg-blue-600'
+                                                    } text-white rounded-full shadow-lg transition-colors`}
+                                                    title={activeStreams[cctv.id] ? 'Stop Voice Stream' : 'Start Voice Stream'}
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                                                              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0-4H3m15.364-3.636l-2.121-2.121m0 0L15 8" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                            {/* Delete Button */}
+                                            <button
+                                                onClick={() => handleDelete(cctv.id)}
+                                                className="p-2 bg-red-500 hover:bg-red-600 
+                                                         text-white rounded-full shadow-lg transition-colors"
+                                                title="Delete Camera"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
                                 </motion.div>
                             ))}
@@ -371,7 +458,7 @@ export default function CCTVManagement() {
                                                     features: {
                                                         motion_detection: true,
                                                         recording: true,
-                                                        audio: false
+                                                        audio: true
                                                     }
                                                 })
                                             }}

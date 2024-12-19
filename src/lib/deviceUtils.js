@@ -43,6 +43,35 @@ export const DEVICE_TYPES = {
       volume: { min: 0, max: 100, step: 1, unit: '%' },
       source: ['hdmi1', 'hdmi2', 'usb', 'tv']
     }
+  },
+  relay: {
+    icon: '🔌',
+    name: 'Smart Relay',
+    features: ['power', 'timer', 'schedule'],
+    settings: {
+      channels: [1, 2, 4, 8], // Jumlah relay
+      modes: ['toggle', 'momentary', 'latching'],
+      timer: {
+        min: 1,
+        max: 1440, // 24 jam dalam menit
+        unit: 'minutes'
+      }
+    },
+    states: {
+      power: ['on', 'off'],
+      timer_remaining: 'number',
+      last_trigger: 'timestamp'
+    }
+  },
+  switch: {
+    icon: '⚡',
+    name: 'Smart Switch',
+    features: ['power', 'energy_monitoring', 'overload_protection'],
+    settings: {
+      max_power: { min: 100, max: 3500, unit: 'watts' },
+      overload_action: ['notify', 'shutdown'],
+      power_restore: ['last_state', 'always_off', 'always_on']
+    }
   }
 }
 
