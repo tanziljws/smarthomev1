@@ -19,19 +19,30 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json()
-    console.log('Received body:', body)
+    console.log('Received request body:', body)
 
     // Validasi input
-    if (!body.name) {
+    if (!body.device_id) {
       return NextResponse.json(
-        { error: 'Device name is required' },
+        { error: 'Device ID is required' },
         { status: 400 }
       )
     }
 
-    // Generate device_id jika tidak ada
-    const deviceId = body.device_id || `ESP_${Math.random().toString(36).substr(2, 6)}`
+    // Cek apakah device sudah ada
+    const [existing] = await pool.query(
+      'SELECT * FROM devices WHERE device_id = ?',
+      [body.device_id]
+    )
 
+    if (existing.length > 0) {
+      return NextResponse.json(
+        { error: 'Device already exists' },
+        { status: 409 }
+      )
+    }
+
+    // Insert device baru
     const [result] = await pool.query(
       `INSERT INTO devices (
         name,
@@ -39,36 +50,23 @@ export async function POST(request) {
         type,
         relay_number,
         topic,
-        location,
-        settings,
-        features,
-        is_online,
         status,
-        last_seen,
-        firmware_version
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)`,
+        is_online
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        body.name,
-        deviceId,
+        body.name || 'New Device',
+        body.device_id,
         body.type || 'relay',
         body.relay_number || '4',
-        `smarthome/${deviceId}`,
-        body.location || null,
-        JSON.stringify(body.settings || {}),
-        JSON.stringify(body.features || []),
-        false,
+        `smarthome/${body.device_id}`,
         JSON.stringify({
-          relays: Array(parseInt(body.relay_number || 4)).fill(false),
-          power: 0,
-          voltage: 0,
-          current: 0,
-          temperature: 0
+          relays: Array(parseInt(body.relay_number || 4)).fill(false)
         }),
-        body.firmware_version || '1.0.0'
+        false
       ]
     )
 
-    // Ambil data device yang baru dibuat
+    // Ambil device yang baru dibuat
     const [newDevice] = await pool.query(
       'SELECT * FROM devices WHERE id = ?',
       [result.insertId]
@@ -80,12 +78,11 @@ export async function POST(request) {
   } catch (error) {
     console.error('Error creating device:', error)
     return NextResponse.json(
-      { 
-        error: 'Internal Server Error', 
-        details: error.message,
-        sql: error.sql
+      {
+        error: 'Failed to create device',
+        details: error.message
       },
       { status: 500 }
     )
   }
-} 
+}

@@ -13,7 +13,7 @@ export default function LoadingBar() {
     const handleComplete = () => setLoading(false)
 
     handleStart()
-    
+
     const timer = setTimeout(handleComplete, 500)
 
     return () => clearTimeout(timer)

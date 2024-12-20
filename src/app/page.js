@@ -1,12 +1,14 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar'
 import 'react-circular-progressbar/dist/styles.css'
 import mqttService, { useMqttStore } from '@/lib/mqtt'
 import MessageItem from '@/components/MessageItem'
-import { getWeather, getWeatherDescription, getWeatherIcon, searchLocation } from '@/lib/weather'
-import { calculateUVIndex, getActivityRecommendations, getHealthImpact } from '@/lib/weatherUtils'
-import Automation from '@/components/Automation'
+import { getWeather, getWeatherDescription, getWeatherIcon, searchLocation } from '@/lib/weathers/weather'
+import WeatherAnalysis from '@/components/WeatherAnalysis'
+import LocationSearch from '@/components/LocationSearch'
+import ActivityRecommendations from '@/components/ActivityRecommendations'
 
 export default function Home() {
   const { messages, sensorData } = useMqttStore()
@@ -27,6 +29,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
+  const [showWeatherAlert, setShowWeatherAlert] = useState(false)
 
   useEffect(() => {
     mqttService.connect()
@@ -56,6 +59,17 @@ export default function Home() {
   useEffect(() => {
     analyzeData()
   }, [sensorData])
+
+  useEffect(() => {
+    if (weather?.current) {
+      const temp = weather.current.temperature_2m
+      if (temp < 10 || temp > 35) {
+        setShowWeatherAlert(true)
+      } else {
+        setShowWeatherAlert(false)
+      }
+    }
+  }, [weather])
 
   const analyzeData = () => {
     // Analisis Temperatur
@@ -113,6 +127,7 @@ export default function Home() {
   }
 
   const getTemperatureColor = (temp) => {
+    if (temp < 10) return '#3b82f6' // blue-500 untuk suhu ekstrem dingin
     if (temp < 25) return '#22c55e' // green-500
     if (temp < 35) return '#f97316' // orange-500
     return '#ef4444' // red-500
@@ -171,16 +186,61 @@ export default function Home() {
   const fetchWeatherData = async () => {
     if (location) {
       const weatherData = await getWeather(location.lat, location.lon)
+      console.log('Fetched Weather Data:', weatherData)
       setWeather(weatherData)
     }
   }
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
+      {/* Floating Weather Alert */}
+      {showWeatherAlert && (
+        <motion.div
+          initial={{ x: 50, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          className="fixed top-4 right-4 z-50"
+        >
+          <div className="relative">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2 }}
+              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500
+                       rounded-full flex items-center justify-center"
+            >
+              <span className="text-white text-xs">!</span>
+            </motion.div>
+            <motion.div
+              animate={{
+                scale: [1, 1.2, 1],
+                transition: { duration: 2, repeat: Infinity }
+              }}
+              className="bg-red-100 text-red-600 p-3 rounded-full
+                       shadow-lg cursor-pointer"
+              onClick={() => {
+                document.querySelector('#weather-warning')?.scrollIntoView({
+                  behavior: 'smooth'
+                })
+              }}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </motion.div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header dengan gradient */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-6 mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Smart Home Dashboard</h1>
-        <p className="text-blue-100">Monitor your home environment in real-time</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Smart Home Dashboard</h1>
+            <p className="text-blue-100">Monitor your home environment in real-time</p>
+          </div>
+          <LocationSearch onLocationSelect={selectLocation} />
+        </div>
       </div>
 
       {/* AI Insights Panel */}
@@ -358,7 +418,7 @@ export default function Home() {
             </div>
           ) : (
             messages.map((msg, index) => (
-              <div 
+              <div
                 key={index}
                 className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors duration-200"
               >
@@ -369,240 +429,126 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Weather Panel dengan Location Selector */}
-      <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-bold text-gray-800">Weather Forecast</h2>
-            <p className="text-gray-500">Local weather conditions</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={getCurrentLocation}
-              className="p-2 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
-              title="Use current location"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
+      {/* Weather Section */}
+      <div className="space-y-6 mb-8">
+        {/* Current Weather Panel */}
+        <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold">Cuaca Saat Ini</h2>
+              <div className="flex items-center gap-2 text-blue-100">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>{location.name}</span>
+              </div>
+            </div>
+
+            {/* Location Search */}
             <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={handleSearch}
-                placeholder="Search location..."
-                className="px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 
-                         focus:ring-blue-500 focus:border-transparent w-64"
-              />
-              {isSearching && (
-                <div className="absolute right-3 top-3">
-                  <svg className="animate-spin h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                </div>
-              )}
-              {searchResults.length > 0 && (
-                <div className="absolute top-full mt-1 w-full bg-white rounded-lg shadow-lg 
-                              border border-gray-200 max-h-80 overflow-y-auto z-50">
-                  {searchResults.map((result, index) => (
-                    <button
-                      key={index}
-                      onClick={() => selectLocation(result)}
-                      className="w-full text-left px-4 py-3 hover:bg-gray-100 border-b border-gray-100 
-                                 last:border-0 transition-colors"
-                    >
-                      <div className="flex items-start gap-2">
-                        <svg className="w-5 h-5 text-gray-400 mt-1 flex-shrink-0" 
-                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        </svg>
-                        <div>
-                          <div className="font-medium text-gray-900">
-                            {result.name}
-                            {result.district && 
-                              <span className="text-gray-600"> • {result.district}</span>
-                            }
-                          </div>
-                          <p className="text-sm text-gray-500 line-clamp-2">
-                            {[
-                              result.city,
-                              result.state,
-                              result.country
-                            ].filter(Boolean).join(', ')}
-                          </p>
-                          {result.type && (
-                            <span className="inline-block mt-1 text-xs px-2 py-0.5 bg-gray-100 
-                                           text-gray-600 rounded-full">
-                              {result.type}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <LocationSearch onLocationSelect={selectLocation} />
             </div>
           </div>
-        </div>
 
-        {weather && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Current Weather */}
-            <div className="bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl p-6 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-2xl font-bold">
-                    {location.name}
-                    {location.district && 
-                      <span className="text-lg font-normal"> • {location.district}</span>
-                    }
-                  </h3>
-                  <p className="text-sky-100">
-                    {[location.city, location.state].filter(Boolean).join(', ')}
-                  </p>
-                  <p className="text-sm text-sky-200 mt-1">
-                    {getWeatherDescription(weather.current.weather_code)}
-                  </p>
-                </div>
-                <div className="text-4xl">
-                  {getWeatherIcon(weather.current.weather_code)}
-                </div>
-              </div>
-              <div className="mt-4">
-                <div className="text-4xl font-bold mb-2">
-                  {Math.round(weather.current.temperature_2m)}°C
-                </div>
-                <div className="flex gap-4 text-sky-100">
-                  <span>Humidity: {weather.current.relative_humidity_2m}%</span>
-                  <span>Wind: {weather.current.wind_speed_10m} km/h</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Daily Forecast */}
-            <div className="bg-gray-50 rounded-xl p-6">
-              <h3 className="text-lg font-semibold mb-4">7-Day Forecast</h3>
-              <div className="space-y-4">
-                {weather.daily.time.map((time, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="text-2xl">
-                        {getWeatherIcon(weather.daily.weather_code[index])}
-                      </div>
-                      <div>
-                        <p className="font-medium">
-                          {new Date(time).toLocaleDateString('en-US', { weekday: 'short' })}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {getWeatherDescription(weather.daily.weather_code[index])}
-                        </p>
-                      </div>
+          {weather?.current && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-center gap-6">
+                  <div className="text-6xl">{getWeatherIcon(weather.current.weather_code)}</div>
+                  <div>
+                    <div className="text-5xl font-bold mb-2">
+                      {Math.round(weather.current.temperature_2m)}°C
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium">
-                        {Math.round(weather.daily.temperature_2m_max[index])}°C
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {Math.round(weather.daily.temperature_2m_min[index])}°C
-                      </p>
+                    <p className="text-xl text-blue-100">
+                      {getWeatherDescription(weather.current.weather_code)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+                    <div className="text-blue-100 mb-1">Kelembaban</div>
+                    <div className="text-2xl font-semibold">
+                      {weather.current.relative_humidity_2m}%
                     </div>
                   </div>
-                ))}
+                  <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+                    <div className="text-blue-100 mb-1">Kecepatan Angin</div>
+                    <div className="text-2xl font-semibold">
+                      {weather.current.wind_speed_10m} km/h
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Peringatan Cuaca Ekstrem */}
+              {showWeatherAlert && (
+                <motion.div
+                  id="weather-warning"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 bg-red-500/20 backdrop-blur-sm rounded-lg p-4
+                           border-l-4 border-red-500"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6 text-red-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <h3 className="font-bold text-red-100">Peringatan Cuaca Ekstrem - Suhu Sangat Rendah!</h3>
+                      <p className="text-red-100/80">Suhu saat ini berbahaya. Harap tetap di dalam ruangan.</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
+                      <span className="text-sm text-red-100">Tindakan yang Disarankan:</span>
+                      <ul className="mt-1 text-sm text-red-100/80 list-disc list-inside">
+                        <li>Gunakan pemanas ruangan</li>
+                        <li>Pakai pakaian berlapis</li>
+                        <li>Hindari aktivitas luar ruangan</li>
+                      </ul>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
+                      <span className="text-sm text-red-100">Status Darurat:</span>
+                      <ul className="mt-1 text-sm text-red-100/80 list-disc list-inside">
+                        <li>Pantau suhu tubuh</li>
+                        <li>Siapkan selimut cadangan</li>
+                        <li>Simpan nomor darurat</li>
+                      </ul>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Weather Analysis */}
+        {weather?.current && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">Analisis Cuaca</h2>
+                <p className="text-gray-500">Analisis AI & Rekomendasi</p>
               </div>
             </div>
-          </div>
-        )}
-
-        {!weather && (
-          <div className="text-center py-8">
-            <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-            </svg>
-            <p className="text-gray-500">Loading weather data...</p>
+            <WeatherAnalysis
+              weather={weather}
+              location={location}
+            />
           </div>
         )}
       </div>
-
-      {/* Advanced Weather Insights */}
-      {weather && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* UV and Health Panel */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Health & UV Index</h3>
-            <div className="space-y-6">
-              {/* UV Index */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-gray-600">UV Index</span>
-                  <span className={`font-semibold ${calculateUVIndex(weather).color}`}>
-                    {calculateUVIndex(weather).level}
-                  </span>
-                </div>
-                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full ${calculateUVIndex(weather).color.replace('text', 'bg')}`}
-                    style={{ width: `${(weather.daily.uv_index_max[0] / 11) * 100}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Health Impacts */}
-              <div className="space-y-3">
-                {getHealthImpact(weather).map((impact, index) => (
-                  <div key={index} className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <div className={`p-2 rounded-full ${
-                        impact.severity === 'high' ? 'bg-red-100 text-red-600' :
-                        impact.severity === 'moderate' ? 'bg-yellow-100 text-yellow-600' :
-                        'bg-blue-100 text-blue-600'
-                      }`}>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-gray-800">{impact.condition}</h4>
-                        <p className="text-sm text-gray-600">{impact.advice}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Activity Recommendations */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Activity Recommendations</h3>
-            <div className="space-y-4">
-              {getActivityRecommendations(weather).map((rec, index) => (
-                <div key={index} className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">{rec.icon}</span>
-                    <h4 className="font-medium text-gray-800">{rec.type}</h4>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {rec.activities.map((activity, idx) => (
-                      <span 
-                        key={idx}
-                        className="px-3 py-1 bg-white rounded-full text-sm text-gray-600 border border-gray-200"
-                      >
-                        {activity}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Share Weather */}
       <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
@@ -611,7 +557,7 @@ export default function Home() {
           <div className="flex gap-2">
             <button
               onClick={() => {
-                const text = `Weather in ${location.name}: ${Math.round(weather.current.temperature_2m)}°C, ${getWeatherDescription(weather.current.weather_code)}`
+                const text = `Weather in ${location.name}: ${Math.round(weather?.current?.temperature_2m)}°C, ${getWeatherDescription(weather?.current?.weather_code)}`
                 window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
               }}
               className="p-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors"
@@ -623,7 +569,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => {
-                const text = `Weather in ${location.name}: ${Math.round(weather.current.temperature_2m)}°C, ${getWeatherDescription(weather.current.weather_code)}`
+                const text = `Weather in ${location.name}: ${Math.round(weather?.current?.temperature_2m)}°C, ${getWeatherDescription(weather?.current?.weather_code)}`
                 navigator.clipboard.writeText(text)
                   .then(() => alert('Weather info copied to clipboard!'))
               }}
@@ -637,7 +583,8 @@ export default function Home() {
           </div>
         </div>
       </div>
-      <Automation />
+
+
     </main>
   )
 }
